@@ -5,26 +5,40 @@ import (
 	"fmt"
 )
 
-// Evaluation represents a set of metrics to be evaluated
-type Evaluation struct {
-	Name             string
-	Description      string
-	pairwiseMetrics  []PairwiseMetric
-	pointwiseMetrics []PointwiseMetric
+// PairwiseEvaluation represents a set of metrics that compare references and predictions
+type PairwiseEvaluation struct {
+	Name    string
+	Description string
+	metrics []PairwiseMetric
 }
 
-// NewEvaluation creates a new evaluation with the given name and description
-func NewEvaluation(name, description string, pairwiseMetrics []PairwiseMetric, pointwiseMetrics []PointwiseMetric) *Evaluation {
-	return &Evaluation{
-		Name:             name,
-		Description:      description,
-		pairwiseMetrics:  pairwiseMetrics,
-		pointwiseMetrics: pointwiseMetrics,
+// PointwiseEvaluation represents a set of metrics that evaluate predictions
+type PointwiseEvaluation struct {
+	Name    string
+	Description string
+	metrics []PointwiseMetric
+}
+
+// NewPairwiseEvaluation creates a new pairwise evaluation
+func NewPairwiseEvaluation(name, description string, metrics []PairwiseMetric) *PairwiseEvaluation {
+	return &PairwiseEvaluation{
+		Name:    name,
+		Description: description,
+		metrics: metrics,
 	}
 }
 
-// Run executes the evaluation on the given instances and predictions
-func (e *Evaluation) Run(ctx context.Context, instances []Instance, predictions []string) ([]Result, error) {
+// NewPointwiseEvaluation creates a new pointwise evaluation
+func NewPointwiseEvaluation(name, description string, metrics []PointwiseMetric) *PointwiseEvaluation {
+	return &PointwiseEvaluation{
+		Name:    name,
+		Description: description,
+		metrics: metrics,
+	}
+}
+
+// Run executes the pairwise evaluation on the given instances
+func (e *PairwiseEvaluation) Run(ctx context.Context, instances []Instance) ([]PairwiseResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -33,31 +47,28 @@ func (e *Evaluation) Run(ctx context.Context, instances []Instance, predictions 
 		return nil, fmt.Errorf("no instances provided")
 	}
 
-	if len(instances) != len(predictions) {
-		return nil, fmt.Errorf("number of instances (%d) does not match number of predictions (%d)", 
-			len(instances), len(predictions))
-	}
-
 	// Extract references and predictions from instances
 	references := make([]string, len(instances))
+	predictions := make([]string, len(instances))
 	for i, instance := range instances {
 		references[i] = instance.Reference
+		predictions[i] = instance.Prediction
 	}
 
-	// Run pairwise metrics
-	results := make([]Result, len(instances))
+	// Initialize results
+	results := make([]PairwiseResult, len(instances))
 	for i := range instances {
-		results[i] = Result{
+		results[i] = PairwiseResult{
 			Instance:      instances[i],
 			MetricResults: make(map[string]float64),
 		}
 	}
 
-	// Run pairwise metrics
-	for _, metric := range e.pairwiseMetrics {
+	// Run metrics
+	for _, metric := range e.metrics {
 		scores, err := metric.Compute(ctx, references, predictions)
 		if err != nil {
-			return nil, fmt.Errorf("pairwise metric %s failed: %w", metric.Name, err)
+			return nil, fmt.Errorf("metric %s failed: %w", metric.Name, err)
 		}
 
 		for i, score := range scores {
@@ -65,11 +76,33 @@ func (e *Evaluation) Run(ctx context.Context, instances []Instance, predictions 
 		}
 	}
 
-	// Run pointwise metrics
-	for _, metric := range e.pointwiseMetrics {
+	return results, nil
+}
+
+// Run executes the pointwise evaluation on the given predictions
+func (e *PointwiseEvaluation) Run(ctx context.Context, predictions []string) ([]PointwiseResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(predictions) == 0 {
+		return nil, fmt.Errorf("no predictions provided")
+	}
+
+	// Initialize results
+	results := make([]PointwiseResult, len(predictions))
+	for i, prediction := range predictions {
+		results[i] = PointwiseResult{
+			Prediction:    prediction,
+			MetricResults: make(map[string]float64),
+		}
+	}
+
+	// Run metrics
+	for _, metric := range e.metrics {
 		scores, err := metric.Compute(ctx, predictions)
 		if err != nil {
-			return nil, fmt.Errorf("pointwise metric %s failed: %w", metric.Name, err)
+			return nil, fmt.Errorf("metric %s failed: %w", metric.Name, err)
 		}
 
 		for i, score := range scores {

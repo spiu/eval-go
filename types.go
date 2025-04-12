@@ -8,9 +8,15 @@ type Instance struct {
 	Prediction string
 }
 
-// Result represents the output of an evaluation
-type Result struct {
+// PairwiseResult represents the output of a pairwise evaluation
+type PairwiseResult struct {
 	Instance      Instance
+	MetricResults map[string]float64
+}
+
+// PointwiseResult represents the output of a pointwise evaluation
+type PointwiseResult struct {
+	Prediction    string
 	MetricResults map[string]float64
 }
 
