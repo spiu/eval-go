@@ -66,4 +66,79 @@ func NewPointwiseMetric(name, description string, compute PointwiseMetricFunc) P
 		Description: description,
 		compute:     compute,
 	}
+}
+
+// ToPairwise converts a pointwise metric into a pairwise one
+// by allowing custom logic to determine the score between reference and prediction
+func (m *PointwiseMetric) ToPairwise(scoreFunc PairwiseScoreFunc) PairwiseMetric {
+	return NewPairwiseMetric(
+		m.Name,
+		m.Description,
+		func(ctx context.Context, references, predictions []string) ([]float64, error) {
+			// Get scores for references
+			referenceScores, err := m.Compute(ctx, references)
+			if err != nil {
+				return nil, err
+			}
+			
+			// Get scores for predictions
+			predictionScores, err := m.Compute(ctx, predictions)
+			if err != nil {
+				return nil, err
+			}
+			
+			// Apply the custom scoring function to each pair
+			scores := make([]float64, len(references))
+			for i := range references {
+				scores[i] = scoreFunc(referenceScores[i], predictionScores[i])
+			}
+			
+			return scores, nil
+		},
+	)
+}
+
+// Default scoring functions for converting pointwise metrics to pairwise
+
+// DifferenceScore calculates the difference between prediction and reference scores
+func DifferenceScore(referenceScore, predictionScore float64) float64 {
+	return predictionScore - referenceScore
+}
+
+// RatioScore calculates the ratio between prediction and reference scores
+func RatioScore(referenceScore, predictionScore float64) float64 {
+	if referenceScore == 0 {
+		return 0 // Avoid division by zero
+	}
+	return predictionScore / referenceScore
+}
+
+// AbsoluteDifferenceScore calculates the absolute difference between prediction and reference scores
+func AbsoluteDifferenceScore(referenceScore, predictionScore float64) float64 {
+	diff := predictionScore - referenceScore
+	if diff < 0 {
+		return -diff
+	}
+	return diff
+}
+
+// MaxScore returns the maximum of the reference and prediction scores
+func MaxScore(referenceScore, predictionScore float64) float64 {
+	if referenceScore > predictionScore {
+		return referenceScore
+	}
+	return predictionScore
+}
+
+// MinScore returns the minimum of the reference and prediction scores
+func MinScore(referenceScore, predictionScore float64) float64 {
+	if referenceScore < predictionScore {
+		return referenceScore
+	}
+	return predictionScore
+}
+
+// AverageScore calculates the average of the reference and prediction scores
+func AverageScore(referenceScore, predictionScore float64) float64 {
+	return (referenceScore + predictionScore) / 2
 } 
